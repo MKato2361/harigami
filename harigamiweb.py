@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # 固定ファイル
 # Streamlit環境では、テンプレートファイルはアプリと同じディレクトリに置くか、適切にパスを指定する必要があります。
-WORD_TEMPLATE = "harigami.docx" 
+WORD_TEMPLATE = "アネックスⅠ.docx" 
 OUTPUT_DIR = "output_docs" # 生成されたWordファイルを一時的に保存するディレクトリ
 
 # プレースホルダー定義
@@ -139,10 +139,20 @@ def process_excel_and_generate_docs(excel_file_buffer):
     try:
         # Excel読込（ファイルバッファから直接読み込む）
         df = pd.read_excel(excel_file_buffer, sheet_name="作業指示書 の一覧", engine='openpyxl')
-        st.info(f"📊 {len(df)}件のデータを読み込みました。文書生成を開始します...")
+        total_rows = len(df)
+        st.info(f"📊 {total_rows}件のデータを読み込みました。文書生成を開始します...")
+        
+        # プログレスバーのプレースホルダーを作成
+        progress_text = st.empty()
+        progress_bar = st.progress(0)
         
         processed_count = 0
         for index, row in df.iterrows():
+            # プログレスバーを更新
+            progress_percent = (index + 1) / total_rows
+            progress_bar.progress(progress_percent)
+            progress_text.text(f"処理中: {index + 1} / {total_rows} 件完了")
+
             st.markdown(f"---")
             st.subheader(f"✨ 処理中: 行 {index + 1}")
             try:
@@ -211,8 +221,13 @@ def process_excel_and_generate_docs(excel_file_buffer):
                 st.error(f"❌ 行 {index + 1}: Word文書作成エラー - {str(e)}")
                 continue
         
+        # 最終的なプログレスバーの状態
+        progress_bar.progress(1.0)
+        progress_text.text(f"処理完了: {processed_count} / {total_rows} 件完了")
+
         st.success(f"\n🎉 {processed_count}件の通知文書の生成が完了しました！")
-        st.write(f"📁 出力フォルダ: `{OUTPUT_DIR}`")
+        st.write(f"📚 生成されたWord文書は、以下のダウンロードリンクから取得できます。")
+        st.info(f"💡 アプリが稼働しているサーバー上では、一時的に `{OUTPUT_DIR}` フォルダにファイルが保存されています。")
         return generated_files
         
     except FileNotFoundError:
@@ -236,8 +251,14 @@ st.markdown("""
 新しいWord文書を生成します。
 """)
 
-st.warning(f"**注意**: Wordテンプレートファイル (`{WORD_TEMPLATE}`) は、このスクリプトと同じディレクトリに配置してください。")
-st.info(f"日付と時刻の**センタリング**については、Wordテンプレート (`{WORD_TEMPLATE}`) 内で該当する段落をあらかじめ「中央揃え」に設定してください。Pythonコードは段落全体をセンタリングします。")
+st.warning(f"**テンプレートの配置**: Wordテンプレートファイル (`{WORD_TEMPLATE}`) は、このスクリプトと同じディレクトリに配置してください。")
+st.info(f"**日付と時刻のセンタリング**: Wordテンプレート (`{WORD_TEMPLATE}`) 内で該当する段落をあらかじめ「中央揃え」に設定してください。Pythonコードは、プレースホルダーを含む段落全体をセンタリングします。")
+st.markdown("""
+**保存先について**:
+このWebアプリケーションでは、生成されたWord文書は、お使いのブラウザを通じてダウンロードしていただきます。
+ダウンロードする際の保存先は、**お使いのPCのダウンロード設定** に従います（ブラウザのダウンロードダイアログで指定できます）。
+アプリケーションが動作しているサーバー上で直接保存場所を選択することはできません。
+""")
 
 uploaded_file = st.file_uploader(
     "1. Excelファイルを選択してください (.xlsx, .xls)",
@@ -252,10 +273,8 @@ if uploaded_file is not None:
         if not os.path.exists(WORD_TEMPLATE):
             st.error(f"エラー: Wordテンプレートファイルが見つかりません。`{WORD_TEMPLATE}` をこのアプリと同じディレクトリに置いてください。")
         else:
-            with st.spinner("Word文書を生成中...しばらくお待ちください。"):
-                # アップロードされたファイルをio.BytesIOで読み込み、DataFrameに渡す
-                excel_buffer = io.BytesIO(uploaded_file.read())
-                generated_doc_paths = process_excel_and_generate_docs(excel_buffer)
+            with st.empty(): # プログレスバーとテキストのために空のコンテナを用意
+                generated_doc_paths = process_excel_and_generate_docs(io.BytesIO(uploaded_file.read()))
             
             if generated_doc_paths:
                 st.subheader("🎉 生成された文書をダウンロード")
@@ -273,7 +292,7 @@ if uploaded_file is not None:
                     except Exception as e:
                         st.error(f"ダウンロードリンクの作成に失敗しました: {os.path.basename(doc_path)} - {e}")
             else:
-                st.warning("生成された文書はありませんでした。Excelデータを確認してください。")
+                st.warning("生成された文書はありませんでした。Excelデータとエラーメッセージを確認してください。")
 
 else:
     st.info("⬆️ 上の「参照」ボタンをクリックして、Excelファイルをアップロードしてください。")
