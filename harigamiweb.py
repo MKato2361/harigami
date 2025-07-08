@@ -212,16 +212,15 @@ def process_excel_and_generate_docs(excel_file_buffer):
 
 # --- Streamlit UI部分 ---
 st.set_page_config(
-    page_title="Word文書自動生成アプリ",
+    page_title="貼紙自動生成アプリ",
     page_icon="📄",
     layout="centered"
 )
 
 st.title("📄 ExcelデータからWord文書を自動生成")
 st.markdown("""
-このアプリは、アップロードされたExcelファイルの情報に基づいて、
-指定されたWordテンプレートのプレースホルダーを自動的に置き換え、
-新しいWord文書を生成します。
+このアプリは、アップロードされたExcelファイル(作業指示書一覧）の情報に基づいて、
+貼紙のWord文書を生成します。
 """)
 
 st.warning(f"**テンプレートの配置**: Wordテンプレートファイル (`{WORD_TEMPLATE}`) は、このスクリプトと同じディレクトリに配置してください。")
