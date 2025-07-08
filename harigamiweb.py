@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # 固定ファイル
 # Streamlit環境では、テンプレートファイルはアプリと同じディレクトリに置くか、適切にパスを指定する必要があります。
-WORD_TEMPLATE = "アネックスⅠ.docx" 
+WORD_TEMPLATE = "harigami.docx" 
 # 一時的な生成ファイルとZIPファイルを保存するディレクトリ
 OUTPUT_DIR = "output_docs" 
 
