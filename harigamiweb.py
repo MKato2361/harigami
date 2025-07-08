@@ -6,14 +6,16 @@ from docx.shared import Pt
 from datetime import datetime
 import warnings
 import io # インメモリファイル操作のために追加
+import zipfile # zipファイル操作のために追加
 
 # openpyxlの警告を非表示にする
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # 固定ファイル
 # Streamlit環境では、テンプレートファイルはアプリと同じディレクトリに置くか、適切にパスを指定する必要があります。
-WORD_TEMPLATE = "harigami.docx" 
-OUTPUT_DIR = "output_docs" # 生成されたWordファイルを一時的に保存するディレクトリ
+WORD_TEMPLATE = "アネックスⅠ.docx" 
+# 一時的な生成ファイルとZIPファイルを保存するディレクトリ
+OUTPUT_DIR = "output_docs" 
 
 # プレースホルダー定義
 PLACEHOLDERS = {
@@ -33,8 +35,6 @@ def replace_placeholders_preserve_format(paragraph, replacements):
 
     for ph, key in PLACEHOLDERS.items():
         if ph in full_text:
-            # st.write(f"  🔄 置換中: '{ph}' → '{replacements[key]}'") # Streamlitではst.writeでデバッグ出力
-
             # 日付や時刻のプレースホルダーが含まれているかチェック
             if key in ["DATE", "START_TIME", "END_TIME"]:
                 should_center = True
@@ -63,8 +63,6 @@ def replace_placeholders_preserve_format(paragraph, replacements):
                         run.font.underline = original_underline
                     if original_color:
                         run.font.color.rgb = original_color.rgb
-                    
-                    # st.write(f"    ✅ 書式保持完了") # Streamlitではst.writeでデバッグ出力
                     break
             
             # 複数runにまたがる場合の処理
@@ -76,7 +74,6 @@ def replace_placeholders_preserve_format(paragraph, replacements):
     if should_center:
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        # st.write(f"    ⭐ 段落をセンタリングしました。") # Streamlitではst.writeでデバッグ出力
 
 
 def replace_text_across_runs(paragraph, search_text, replace_text):
@@ -88,11 +85,8 @@ def replace_text_across_runs(paragraph, search_text, replace_text):
         
         if paragraph.runs:
             first_run = paragraph.runs[0]
-            # original_font = first_run.font # 書式保持は上でやっているので不要であればコメントアウト
-            
             for run in paragraph.runs[1:]:
                 run.text = ""
-            
             first_run.text = new_text
 
 def replace_placeholders_in_tables(doc, replacements):
@@ -105,17 +99,12 @@ def replace_placeholders_in_tables(doc, replacements):
 
 def replace_placeholders_comprehensive(doc, replacements):
     """文書全体の包括的な置換処理"""
-    # st.write("  📝 段落の置換処理開始...") # Streamlitではst.writeでデバッグ出力
-    
     for i, para in enumerate(doc.paragraphs):
         if para.text.strip():
-            # st.write(f"    段落 {i+1}: '{para.text[:50]}...'") # Streamlitではst.writeでデバッグ出力
             replace_placeholders_preserve_format(para, replacements)
     
-    # st.write("  📋 テーブルの置換処理開始...") # Streamlitではst.writeでデバッグ出力
     replace_placeholders_in_tables(doc, replacements)
     
-    # st.write("  📄 ヘッダー・フッターの置換処理開始...") # Streamlitではst.writeでデバッグ出力
     for section in doc.sections:
         if section.header:
             for para in section.header.paragraphs:
@@ -134,7 +123,7 @@ def process_excel_and_generate_docs(excel_file_buffer):
     # 出力フォルダ作成（Streamlitの場合、コンテナ内の一時ディレクトリでも良い）
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
-    generated_files = [] # 生成されたファイルのパスを保持するリスト
+    generated_file_paths = [] # 生成されたWordファイルのパスを保持するリスト
 
     try:
         # Excel読込（ファイルバッファから直接読み込む）
@@ -153,24 +142,24 @@ def process_excel_and_generate_docs(excel_file_buffer):
             progress_bar.progress(progress_percent)
             progress_text.text(f"処理中: {index + 1} / {total_rows} 件完了")
 
-            st.markdown(f"---")
-            st.subheader(f"✨ 処理中: 行 {index + 1}")
+            # st.markdown(f"---") # 各行の処理詳細表示はStreamlit Cloudではログが長くなるのでコメントアウト
+            # st.subheader(f"✨ 処理中: 行 {index + 1}")
             try:
                 if pd.isna(row["物件名"]) or pd.isna(row["予定開始"]) or pd.isna(row["予定終了"]):
-                    st.warning(f"⚠️  行 {index + 1}: 必要なデータが不足しています（スキップ）")
+                    # st.warning(f"⚠️  行 {index + 1}: 必要なデータが不足しています（スキップ）")
                     continue
                 
                 name = str(row["物件名"]).strip()
                 
-                st.write(f"🔍 物件名: {name}")
-                st.write(f"   予定開始: {row['予定開始']} (型: {type(row['予定開始'])})")
-                st.write(f"   予定終了: {row['予定終了']} (型: {type(row['予定終了'])})")
+                # st.write(f"🔍 物件名: {name}")
+                # st.write(f"   予定開始: {row['予定開始']} (型: {type(row['予定開始'])})")
+                # st.write(f"   予定終了: {row['予定終了']} (型: {type(row['予定終了'])})")
                 
                 start_dt = pd.to_datetime(row["予定開始"], errors='coerce')
                 end_dt = pd.to_datetime(row["予定終了"], errors='coerce')
                 
                 if pd.isna(start_dt) or pd.isna(end_dt):
-                    st.error(f"❌ 行 {index + 1}: 日付・時間の変換に失敗しました（スキップ）")
+                    # st.error(f"❌ 行 {index + 1}: 日付・時間の変換に失敗しました（スキップ）")
                     continue
                 
                 weekdays = {
@@ -183,10 +172,10 @@ def process_excel_and_generate_docs(excel_file_buffer):
                 start_str = start_dt.strftime("%H:%M")
                 end_str = end_dt.strftime("%H:%M")
                 
-                st.write(f"   変換結果: {date_str} {start_str}-{end_str}")
+                # st.write(f"   変換結果: {date_str} {start_str}-{end_str}")
                 
             except Exception as e:
-                st.error(f"❌ 行 {index + 1}: データ処理エラー - {str(e)}（スキップ）")
+                # st.error(f"❌ 行 {index + 1}: データ処理エラー - {str(e)}（スキップ）")
                 continue
             
             replacements = {
@@ -205,20 +194,20 @@ def process_excel_and_generate_docs(excel_file_buffer):
                     
                 doc = Document(WORD_TEMPLATE)
                 
-                st.write(f"  📄 Word文書の置換処理開始...")
+                # st.write(f"  📄 Word文書の置換処理開始...")
                 replace_placeholders_comprehensive(doc, replacements)
                 
-                safe_name = name.replace("/", "_").replace("\\", "_").replace(":", "_").replace(" ", "_")
+                safe_name = name.replace("/", "_").replace("\\", "_").replace(":", "_").replace(" ", "_").replace("　", "_")
                 output_file_name = f"{safe_name}.docx"
                 output_path = os.path.join(OUTPUT_DIR, output_file_name)
                 
                 doc.save(output_path)
-                generated_files.append(output_path)
+                generated_file_paths.append(output_path)
                 processed_count += 1
-                st.success(f"✅ 生成完了: {output_file_name}")
+                # st.success(f"✅ 生成完了: {output_file_name}")
                 
             except Exception as e:
-                st.error(f"❌ 行 {index + 1}: Word文書作成エラー - {str(e)}")
+                # st.error(f"❌ 行 {index + 1}: Word文書作成エラー - {str(e)}")
                 continue
         
         # 最終的なプログレスバーの状態
@@ -226,9 +215,9 @@ def process_excel_and_generate_docs(excel_file_buffer):
         progress_text.text(f"処理完了: {processed_count} / {total_rows} 件完了")
 
         st.success(f"\n🎉 {processed_count}件の通知文書の生成が完了しました！")
-        st.write(f"📚 生成されたWord文書は、以下のダウンロードリンクから取得できます。")
-        st.info(f"💡 アプリが稼働しているサーバー上では、一時的に `{OUTPUT_DIR}` フォルダにファイルが保存されています。")
-        return generated_files
+        # st.write(f"📚 生成されたWord文書は、以下のダウンロードリンクから取得できます。") # ZIPダウンロードに変わるのでコメントアウト
+        # st.info(f"💡 アプリが稼働しているサーバー上では、一時的に `{OUTPUT_DIR}` フォルダにファイルが保存されています。")
+        return generated_file_paths
         
     except FileNotFoundError:
         st.error(f"❌ ファイルが見つかりません。")
@@ -255,7 +244,7 @@ st.warning(f"**テンプレートの配置**: Wordテンプレートファイル
 st.info(f"**日付と時刻のセンタリング**: Wordテンプレート (`{WORD_TEMPLATE}`) 内で該当する段落をあらかじめ「中央揃え」に設定してください。Pythonコードは、プレースホルダーを含む段落全体をセンタリングします。")
 st.markdown("""
 **保存先について**:
-このWebアプリケーションでは、生成されたWord文書は、お使いのブラウザを通じてダウンロードしていただきます。
+生成されたWord文書は、まとめてZIPファイルとして提供されます。
 ダウンロードする際の保存先は、**お使いのPCのダウンロード設定** に従います（ブラウザのダウンロードダイアログで指定できます）。
 アプリケーションが動作しているサーバー上で直接保存場所を選択することはできません。
 """)
@@ -273,24 +262,42 @@ if uploaded_file is not None:
         if not os.path.exists(WORD_TEMPLATE):
             st.error(f"エラー: Wordテンプレートファイルが見つかりません。`{WORD_TEMPLATE}` をこのアプリと同じディレクトリに置いてください。")
         else:
-            with st.empty(): # プログレスバーとテキストのために空のコンテナを用意
-                generated_doc_paths = process_excel_and_generate_docs(io.BytesIO(uploaded_file.read()))
+            with st.spinner("Word文書を生成中...しばらくお待ちください。"):
+                # アップロードされたファイルをio.BytesIOで読み込み、DataFrameに渡す
+                excel_buffer = io.BytesIO(uploaded_file.read())
+                generated_doc_paths = process_excel_and_generate_docs(excel_buffer)
             
             if generated_doc_paths:
-                st.subheader("🎉 生成された文書をダウンロード")
+                st.subheader("🎉 生成された文書をまとめてダウンロード")
+                
+                # ZIPファイルを作成し、メモリに書き込む
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for doc_path in generated_doc_paths:
+                        try:
+                            # ZIPファイルに追加する際のファイル名を調整 (フォルダパスは含めない)
+                            zf.write(doc_path, os.path.basename(doc_path))
+                        except Exception as e:
+                            st.warning(f"ZIPへの追加に失敗: {os.path.basename(doc_path)} - {e}")
+
+                # ZIPファイルのバッファの開始位置をリセット
+                zip_buffer.seek(0)
+
+                # ZIPファイルをダウンロードボタンで提供
+                st.download_button(
+                    label="全てのWord文書をZIPでダウンロード",
+                    data=zip_buffer.getvalue(), # バッファの内容を取得
+                    file_name="generated_word_documents.zip",
+                    mime="application/zip"
+                )
+                
+                # 生成された個別ファイルを削除 (ディスクスペースの節約のため、Streamlit Cloudなどで重要)
                 for doc_path in generated_doc_paths:
                     try:
-                        with open(doc_path, "rb") as f:
-                            st.download_button(
-                                label=f"ダウンロード: {os.path.basename(doc_path)}",
-                                data=f.read(),
-                                file_name=os.path.basename(doc_path),
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            )
-                        # ダウンロードリンク提供後、ファイルを削除する（必要に応じて）
-                        # os.remove(doc_path)
+                        os.remove(doc_path)
                     except Exception as e:
-                        st.error(f"ダウンロードリンクの作成に失敗しました: {os.path.basename(doc_path)} - {e}")
+                        st.warning(f"一時ファイルの削除に失敗: {doc_path} - {e}")
+                
             else:
                 st.warning("生成された文書はありませんでした。Excelデータとエラーメッセージを確認してください。")
 
