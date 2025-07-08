@@ -14,7 +14,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # 固定ファイル
 # Streamlit環境では、テンプレートファイルはアプリと同じディレクトリに置くか、適切にパスを指定する必要があります。
-WORD_TEMPLATE = "harigami.docx" 
+WORD_TEMPLATE = "アネックスⅠ.docx" 
 # 一時的な生成ファイルとZIPファイルを保存するディレクトリ
 OUTPUT_DIR = "output_docs" 
 
@@ -152,8 +152,6 @@ def process_excel_and_generate_docs(excel_file_buffer):
                 end_str = end_dt.strftime("%H:%M")
                 
             except Exception as e:
-                # エラーメッセージを詳細に表示する場合はst.errorを使用
-                # st.error(f"❌ 行 {index + 1}: データ処理エラー - {str(e)}（スキップ）")
                 continue
             
             replacements = {
@@ -173,13 +171,9 @@ def process_excel_and_generate_docs(excel_file_buffer):
                 replace_placeholders_comprehensive(doc, replacements)
                 
                 # --- ここからファイル名サニタイズの強化 ---
-                # アルファベット、数字、アンダースコア、ハイフン、ピリオド以外の文字をアンダースコアに置換
                 safe_name = re.sub(r'[^\w\.\-]', '_', name)
-                # 連続するアンダースコアを一つにまとめる
                 safe_name = re.sub(r'_{2,}', '_', safe_name)
-                # 先頭や末尾のアンダースコアを削除
                 safe_name = safe_name.strip('_')
-                # 空になった場合のフォールバック
                 if not safe_name:
                     safe_name = "untitled_document"
                 # --- ファイル名サニタイズの強化ここまで ---
@@ -188,11 +182,17 @@ def process_excel_and_generate_docs(excel_file_buffer):
                 output_path = os.path.join(OUTPUT_DIR, output_file_name)
                 
                 doc.save(output_path)
-                generated_file_paths.append(output_path)
-                processed_count += 1
                 
+                # --- ファイルが実際に保存されたかを確認 ---
+                if os.path.exists(output_path):
+                    generated_file_paths.append(output_path)
+                    processed_count += 1
+                else:
+                    # ファイルが保存されなかった場合は警告
+                    st.warning(f"⚠️ 行 {index + 1}: Word文書 '{output_file_name}' の保存に失敗しました。このファイルはZIPに含まれません。")
+
             except Exception as e:
-                # ファイル作成エラーも詳細に表示する場合はst.errorを使用
+                # ここでWord文書作成時のエラーをキャッチし、ログに記録（Streamlit UIには表示しないが内部で把握）
                 # st.error(f"❌ 行 {index + 1}: Word文書作成エラー - {str(e)}")
                 continue
         
@@ -273,9 +273,10 @@ if uploaded_file is not None:
                 
                 for doc_path in generated_doc_paths:
                     try:
-                        os.remove(doc_path)
+                        # ファイル削除前に再度存在チェック
+                        if os.path.exists(doc_path):
+                            os.remove(doc_path)
                     except Exception as e:
-                        # ここでエラーが出てもアプリの実行には影響しないため、警告ログにとどめる
                         st.warning(f"一時ファイルの削除に失敗: {doc_path} - {e}")
                 
             else:
