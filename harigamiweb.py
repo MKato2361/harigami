@@ -217,7 +217,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("📄 ExcelデータからWord文書を自動生成")
+st.title("📄貼紙自動生成アプリ")
 st.markdown("""
 このアプリは、アップロードされたExcelファイル(作業指示書一覧）の情報に基づいて、
 貼紙のWord文書を生成します。
