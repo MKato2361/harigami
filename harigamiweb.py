@@ -11,6 +11,7 @@ import re
 
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
+DEFAULT_TEMPLATE_PATH = "harigami.docx"
 OUTPUT_DIR = "output_docs"
 
 PLACEHOLDERS = {
@@ -93,7 +94,7 @@ def replace_placeholders_comprehensive(doc, replacements):
             for para in section.footer.paragraphs:
                 replace_placeholders_preserve_format(para, replacements)
 
-def process_excel_and_generate_docs(excel_file_buffer, template_file_buffer):
+def process_excel_and_generate_docs(excel_file_buffer, template_source, is_uploaded):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     generated_file_paths = []
 
@@ -139,16 +140,17 @@ def process_excel_and_generate_docs(excel_file_buffer, template_file_buffer):
             }
 
             try:
-                template_file_buffer.seek(0)  # 必ず先頭に戻す
-                doc = Document(template_file_buffer)
+                if is_uploaded:
+                    template_source.seek(0)
+                    doc = Document(template_source)
+                else:
+                    doc = Document(template_source)
 
                 replace_placeholders_comprehensive(doc, replacements)
 
                 safe_name = re.sub(r'[^\w\.\-]', '_', name)
                 safe_name = re.sub(r'_{2,}', '_', safe_name)
-                safe_name = safe_name.strip('_')
-                if not safe_name:
-                    safe_name = "untitled_document"
+                safe_name = safe_name.strip('_') or "untitled_document"
 
                 output_file_name = f"{safe_name}.docx"
                 output_path = os.path.join(OUTPUT_DIR, output_file_name)
@@ -163,7 +165,6 @@ def process_excel_and_generate_docs(excel_file_buffer, template_file_buffer):
 
         progress_bar.progress(1.0)
         progress_text.text(f"処理完了: {processed_count} / {total_rows} 件完了")
-
         st.success(f"\n🎉 {processed_count}件の通知文書の生成が完了しました！")
         return generated_file_paths
 
@@ -171,7 +172,7 @@ def process_excel_and_generate_docs(excel_file_buffer, template_file_buffer):
         st.error(f"❌ エラーが発生しました: {str(e)}")
         return []
 
-# --- Streamlit UI部分 ---
+# --- Streamlit UI ---
 st.set_page_config(
     page_title="貼紙自動生成アプリ",
     page_icon="📄",
@@ -190,30 +191,48 @@ uploaded_file = st.file_uploader(
     help="「作業指示書 の一覧」シートが含まれるExcelファイルをアップロードしてください。"
 )
 
-template_file = st.file_uploader(
-    "2. Wordテンプレートファイルをアップロードしてください (.docx)",
-    type=["docx"],
-    help="貼紙テンプレートのWordファイル（例: harigami.docx）をアップロードしてください。"
+template_choice = st.radio(
+    "2. 使用するテンプレートを選択してください",
+    ("デフォルトテンプレートを使用", "テンプレートをアップロードする")
 )
 
-if uploaded_file and template_file:
-    st.success("Excelファイルとテンプレートファイルが正常にアップロードされました！")
+if template_choice == "テンプレートをアップロードする":
+    uploaded_template = st.file_uploader(
+        "2-1. Wordテンプレートファイルをアップロードしてください (.docx)",
+        type=["docx"]
+    )
+    template_ready = uploaded_template is not None
+    template_info = uploaded_template
+    is_uploaded_template = True
+else:
+    if not os.path.exists(DEFAULT_TEMPLATE_PATH):
+        st.error(f"❌ デフォルトテンプレートが見つかりません: `{DEFAULT_TEMPLATE_PATH}`")
+        template_ready = False
+        template_info = None
+    else:
+        st.info(f"✅ デフォルトテンプレート `{DEFAULT_TEMPLATE_PATH}` を使用します。")
+        template_ready = True
+        template_info = DEFAULT_TEMPLATE_PATH
+        is_uploaded_template = False
+
+if uploaded_file and template_ready:
+    st.success("Excelファイルとテンプレートが準備できました！")
 
     if st.button("3. Word文書を生成する"):
         with st.spinner("Word文書を生成中...しばらくお待ちください。"):
             excel_buffer = io.BytesIO(uploaded_file.read())
-            template_buffer = io.BytesIO(template_file.read())
-            generated_doc_paths = process_excel_and_generate_docs(excel_buffer, template_buffer)
+            if is_uploaded_template:
+                template_buffer = io.BytesIO(template_info.read())
+                generated_doc_paths = process_excel_and_generate_docs(excel_buffer, template_buffer, True)
+            else:
+                generated_doc_paths = process_excel_and_generate_docs(excel_buffer, template_info, False)
 
         if generated_doc_paths:
             st.subheader("🎉 生成された文書をまとめてダウンロード")
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
                 for doc_path in generated_doc_paths:
-                    try:
-                        zf.write(doc_path, os.path.basename(doc_path))
-                    except Exception as e:
-                        st.warning(f"ZIPへの追加に失敗: {os.path.basename(doc_path)} - {e}")
+                    zf.write(doc_path, os.path.basename(doc_path))
             zip_buffer.seek(0)
 
             st.download_button(
@@ -224,15 +243,12 @@ if uploaded_file and template_file:
             )
 
             for doc_path in generated_doc_paths:
-                try:
-                    if os.path.exists(doc_path):
-                        os.remove(doc_path)
-                except Exception as e:
-                    st.warning(f"一時ファイルの削除に失敗: {doc_path} - {e}")
+                if os.path.exists(doc_path):
+                    os.remove(doc_path)
         else:
-            st.warning("文書の生成に失敗したか、生成対象がありませんでした。Excelデータとテンプレートを確認してください。")
+            st.warning("文書の生成に失敗したか、対象データがありません。")
 else:
-    st.info("⬆️ 上のボタンから、ExcelファイルとWordテンプレートの両方をアップロードしてください。")
+    st.info("⬆️ Excelファイルとテンプレートファイルをアップロードまたは選択してください。")
 
 st.markdown("---")
 st.caption("Powered by Streamlit")
